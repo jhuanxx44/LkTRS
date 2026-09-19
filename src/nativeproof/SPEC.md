@@ -1,0 +1,121 @@
+# Native Lk-TRS profile v1
+
+This specifies the executable profile in `src/nativeproof`, accompanying
+[the Lk-TRS paper](https://doi.org/10.1109/JIOT.2024.3485674). It instantiates Lk-TRS equations with
+BN254 pairings, secp256k1 as the standalone group, SHA-256 and Groth16. It does
+not inherit the paper's security proof or cost claims. C++ owns a framed local
+process interface; Go/gnark supplies the native arithmetic and proof backend.
+
+## Parameters and deliberate differences
+
+- Pairing groups: BN254 G1/G2. Accumulator and witness are **both in G1**;
+  `H` and `HTau=[tau]H` are in G2.
+- Standalone group: secp256k1, order `ell`. User secret `x`, per-account `d`,
+  seeds `s,t`, challenge `R` and inversion arithmetic are in `Z_ell`.
+- Nym remains in pairing G1. Its exponents are explicitly reduced from their
+  canonical secp256k1 integers into BN254 Fr; the two orders are not identified.
+  This differs from the paper's single-order notation and requires a new
+  security analysis. There is no claim of equivalence to its reduction.
+- Nym bases are independent `bn254.HashToG1` outputs for `g0`, `g1`, `g2` with
+  DST `LKTRS-BN254-NYM-V1`. `u` is the secp generator. `ut` is
+  `secp256k1.HashToG1(issue, LKTRS-SECP256K1-ISSUE-V1)`.
+- q-SDH setup creates public powers of a CSPRNG-sampled nonzero trapdoor and
+  retains no trapdoor in `Params`. Local single-party setup is not an audited
+  MPC ceremony and does not guarantee forensic erasure. Groth16 setup has a
+  separate trusted-setup assumption. BN254 is not a claimed 128/256-bit profile.
+
+## Connected witness statement
+
+For a canonical nonzero private `x,d`, the selected account is
+`Ui=[d]u`, `Yi=[x]Ui`. The selected account, member identifier, both seeds,
+`x,d,cnt,W` and hash preimages are private. There is **no public seed digest**.
+The public statement contains accumulator `V`, trusted `H,HTau`, `nym,S,T,ut`,
+issue, ring digest, message digest, timestamp, quota and `R`.
+
+The circuit enforces, in one compiled R1CS:
+
+1. Canonical nonzero scalar/point domains and subgroup checks.
+2. `s=SHA256(x32 || issue32 || 0) mod ell` and
+   `t=SHA256(x32 || issue32 || 1) mod ell`, both nonzero. Bytes of `x` are
+   generated from its canonical scalar, eliminating an alternative-preimage
+   alias such as `x+ell`.
+3. `nym=[s mod r]g0 + [t mod r]g1 + [x mod r]g2`.
+4. Account ownership and
+   `a=SHA256("lktrs/member/v1" || Ui.x32 || Ui.y32 || Yi.x32 || Yi.y32) mod r`.
+   `a` must be nonzero and feeds the membership equation directly.
+5. `e(W,[a]H+HTau)=e(V,H)`. The implementation regroups this as
+   `e([a]W-V,H) * e(W,HTau)=1`; the prover never needs `tau`.
+6. A native 32-bit counter with `0<=cnt<k`, for nonzero 32-bit public `k`.
+7. `S=[1/(s+cnt+1)]ut` and **`T=[x]u+[R/(t+cnt+1)]ut`**, with both
+   denominators nonzero.
+8. Challenge `R` is nonzero SHA-256 of the public transcript below, reduced
+   into **secp256k1 Fr**, and is the same `R` used by `T` and public tracing.
+
+Membership is hidden by the private account hash and q-SDH witness against the
+public accumulator. A separate linear selector is unnecessary. The circuit
+size is independent of ring size; public accumulation uses the bounded powers
+sequence and the full public account set.
+
+## Transcript and independent verifier
+
+Integers and affine coordinates use fixed-width big-endian encoding. Seeds
+use the preimages above. The ring digest is SHA-256 of
+`"lktrs/ring/v1" || count32 || ordered (Ui.x32 || Ui.y32 || Yi.x32 || Yi.y32)`.
+Duplicates and invalid points are rejected. Ordered rings are distinct labels.
+
+The challenge preimage is:
+
+```
+"lktrs/challenge/v1" || issue32 || ringDigest32 || SHA256(message)32 ||
+nym.x32 || nym.y32 || timestamp64 || k32
+```
+
+This profile's encoding is versioned independently of the PBC clear reference.
+Its verifier recomputes the ring digest, `V`, message hash, `R`, `ut`, and supplies
+trusted `H,HTau`. It checks expected issue and quota. Accepting arbitrary `ut`
+or setup points from a signature would break the trace/membership contracts.
+`Verifier` stores only a verification key and trusted identifiers. Verification
+uses `frontend.PublicOnly()` and never reads the signer or private registry.
+
+`Signed` contains only the public statement and the compressed proof. Its
+`LKTRSN01` envelope rejects noncanonical coordinates/scalars, invalid curves,
+truncation and trailing data; the circuit identity is the SHA-256 digest of
+gnark's canonical serialized compiled R1CS. The verifier checks that digest,
+the VK byte digest and public-input width; callers must provision those values
+from an authenticated setup manifest. The compressed proof
+layout and commitment count are checked against trusted VK metadata before the
+third-party decoder can allocate a commitment slice. Caller-provided proof
+metadata does not establish trust in a verification key. This digest prevents
+silent circuit drift; it does not by itself prove that an arbitrary VK was
+generated by an honest ceremony.
+
+## Stateful algorithms
+
+`KeyGen` reuses one user `x` across accounts. `Signer` shares one counter per
+issue across those accounts and advances it only after successful proving.
+`Snapshot` applies Join/Exit atomically, including empty-state exit/rejoin.
+`Registry` checks consistent per-user trace keys; user revocation removes all
+of that user's registered accounts from the active snapshot.
+
+The service records revoked-user tombstones that prevent keygen and rejoin.
+With `LKTRS_STATE_PATH`, quota policies, tombstones and consumed envelope
+digests are saved by atomic replacement with file and directory sync. Setup,
+private keys, counters and account records remain in memory. This optional
+ledger does not provide wallet recovery or authenticated enrollment.
+
+Library `Verifier.Verify` is stateless. Service `verify` additionally rejects
+an already consumed envelope digest after successful verification. This detects
+byte-identical replay; randomized proofs of the same statement have distinct
+envelope digests. `Link` and `Trace` do not consume ledger entries.
+Concurrent processes must not share a state file.
+
+Link and kTrace first verify both real proofs. Equal nym links within an issue, including across different rings.
+Distinct S returns legal; identical serial/challenge/tag is replay regardless
+of proof randomness. Equal S with different R recovers
+`(R2*T1 - R1*T2)/(R2-R1)=[x]u`. Public registry metadata `d` resolves the user by
+`Yi=[d]([x]u)`. This does not extract the secret x or identify which account signed.
+
+Historical verification requires the historical ring snapshot. Verification
+against the current snapshot rejects exited/revoked membership. Durable wallet
+counter storage, authenticated registration and an external cryptographic audit
+remain outside this research implementation's evidence.

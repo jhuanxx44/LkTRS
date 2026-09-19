@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this implementation, please cite the accompanying paper."
+type: software
+title: "Lk-TRS: paper companion implementation"
+authors:
+  - family-names: Xie
+    given-names: Jinghuan
+repository-code: "https://github.com/jhuanxx44/LkTRS"
+preferred-citation:
+  type: article
+  title: "Linkable, k-Times Traceable, and Revocable Ring Signature for Fine-Grained Accountability in Blockchain Transactions"
+  authors:
+    - family-names: "Xie"
+      given-names: "Jinghuan"
+    - family-names: "Zhou"
+      given-names: "Jun"
+    - family-names: "Cao"
+      given-names: "Zhenfu"
+    - family-names: "Dong"
+      given-names: "Xiaolei"
+    - family-names: "Choo"
+      given-names: "Kim-Kwang Raymond"
+  journal: "IEEE Internet of Things Journal"
+  year: 2025
+  volume: "12"
+  issue: "4"
+  start: "4349"
+  end: "4361"
+  doi: "10.1109/JIOT.2024.3485674"

@@ -1,0 +1,93 @@
+name: Resource-layer checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  resources:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgmp-dev libsodium-dev flex bison
+      - name: macOS build dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install gmp libsodium
+          echo "CPPFLAGS=-I$(brew --prefix gmp)/include" >> "$GITHUB_ENV"
+          echo "LDFLAGS=-L$(brew --prefix gmp)/lib" >> "$GITHUB_ENV"
+      - name: Build pinned PBC
+        run: bash scripts/build-pbc.sh "$RUNNER_TEMP/pbc"
+      - name: Configure
+        run: |
+          cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/pbc" \
+            -DLKTRS_SANITIZERS=ON -DLKTRS_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build/ci -j2
+      # Leak detection stays ON for the resource layer. The only exclusion is
+      # the `known-leaks` label, which covers the frozen W01 legacy baseline
+      # (LkTRS::KeyGen leaks G1 elements; AGENTS.md rule 3 forbids repairing
+      # legacy in place without an ADR). See the comment in CMakeLists.txt.
+      - name: Test (Linux, resource layer with leak detection)
+        if: runner.os == 'Linux'
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build/ci --output-on-failure -LE known-leaks
+
+      # Keep the legacy baselines visible, but do not ask leak detection to
+      # certify a leak that is already documented as present.
+      - name: Test (Linux, legacy baseline without leak detection)
+        if: runner.os == 'Linux'
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build/ci --output-on-failure -L known-leaks
+      - name: Test (macOS)
+        if: runner.os == 'macOS'
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build/ci --output-on-failure
+
+  native-profile:
+    # The connected profile is compiled and its fast Go/C++ tests run on every
+    # change. The multi-minute Groth16 setup/prove test remains an explicit
+    # local/manual validation (`LKTRS_PROVE=1`) rather than silently extending
+    # the resource-layer matrix.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.7'
+      - name: Native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgmp-dev libsodium-dev flex bison
+      - name: Build pinned PBC
+        run: bash scripts/build-pbc.sh "$RUNNER_TEMP/pbc"
+      - name: Configure connected profile
+        run: |
+          cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/pbc" \
+            -DLKTRS_NATIVE_PROOF=ON -DLKTRS_WARNINGS_AS_ERRORS=ON
+      - name: Build connected profile
+        run: cmake --build build/native -j2
+      - name: Go tests and vet
+        working-directory: src/nativeproof
+        run: |
+          go test -count=1 ./...
+          go vet ./...
+      - name: Fast native CTest
+        run: ctest --test-dir build/native --output-on-failure -LE slow
+      # The real Groth16 setup/prove path is intentionally opt-in because it
+      # takes several minutes and consumes substantial CI resources. A manual
+      # dispatch must still exercise the connected C++/Go lifecycle rather than
+      # leaving it permanently outside automation.
+      - name: Slow native Groth16 CTest (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: ctest --test-dir build/native --output-on-failure -L slow

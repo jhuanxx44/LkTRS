@@ -1,1 +1,8 @@
 /build
+/local
+/AGENTS.md
+.DS_Store
+
+# Local research documentation and editor state
+/docs/
+/.vscode/
