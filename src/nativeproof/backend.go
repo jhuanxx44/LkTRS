@@ -16,6 +16,7 @@ import (
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"io"
 	"math/big"
+	"reflect"
 	"sync"
 )
 
@@ -152,12 +153,26 @@ func LoadVerifier(key []byte, circuitHash, keyID [32]byte) (*Verifier, error) {
 	if sha256.Sum256(key) != keyID {
 		return nil, errors.New("verification key digest mismatch")
 	}
-	expectedHash, err := ExpectedCircuitHash()
+	if err := preflightVerifyingKey(key); err != nil {
+		return nil, err
+	}
+	cs, err := Compile()
 	if err != nil {
-		return nil, fmt.Errorf("compile expected circuit: %w", err)
+		return nil, err
+	}
+	return loadVerifierForCircuit(key, circuitHash, keyID, cs)
+}
+
+func loadVerifierForCircuit(key []byte, circuitHash, keyID [32]byte, cs constraint.ConstraintSystem) (*Verifier, error) {
+	if len(key) > maxProofBytes || sha256.Sum256(key) != keyID {
+		return nil, errors.New("verification key digest mismatch")
+	}
+	expectedHash, err := digestWriter(cs)
+	if err != nil {
+		return nil, err
 	}
 	if circuitHash != expectedHash {
-		return nil, errors.New("circuit hash is not the pinned native profile")
+		return nil, errors.New("circuit hash is not the compiled native profile")
 	}
 	if err := preflightVerifyingKey(key); err != nil {
 		return nil, err
@@ -170,20 +185,27 @@ func LoadVerifier(key []byte, circuitHash, keyID [32]byte) (*Verifier, error) {
 	if r.Len() != 0 {
 		return nil, errors.New("trailing key bytes")
 	}
-	cs, err := Compile()
-	if err != nil {
-		return nil, fmt.Errorf("compile expected circuit: %w", err)
+	commitments, ok := cs.GetCommitments().(constraint.Groth16Commitments)
+	if !ok {
+		return nil, errors.New("wrong circuit commitment type")
 	}
-	if vk.NbPublicWitness() != cs.GetNbPublicVariables() {
-		return nil, fmt.Errorf("verification key public witness width %d does not match compiled circuit width %d", vk.NbPublicWitness(), cs.GetNbPublicVariables())
+	native := vk.(*bngroth.VerifyingKey)
+	// gnark adds one verifier wire per commitment and omits the constant from
+	// NbPublicWitness. Match the actual commitment layout, not an incidental
+	// equality of that count with the number of circuit public variables.
+	wantMetadata := commitments.GetPublicAndCommitmentCommitted(commitments.CommitmentIndexes(), cs.GetNbPublicVariables())
+	if len(native.G1.K) != cs.GetNbPublicVariables()+len(commitments) ||
+		len(native.CommitmentKeys) != len(commitments) ||
+		!reflect.DeepEqual(native.PublicAndCommitmentCommitted, wantMetadata) {
+		return nil, errors.New("verification key public/commitment layout differs from circuit")
 	}
 	return &Verifier{vk: vk, circuitHash: circuitHash, keyID: keyID}, nil
 }
 
 // Validate all variable-length prefixes before gnark's decoder, which otherwise
-// allocates slices directly from untrusted uint32 counts. The profile normally
-// has no commitment keys, but bounded Pedersen metadata is accepted because the
-// serialized VK format can contain it.
+// allocates slices directly from untrusted uint32 counts. The native profile
+// uses Pedersen commitments; exact metadata is checked against the local
+// compiled circuit after decoding.
 func preflightVerifyingKey(raw []byte) error {
 	const maxEntries = 1 << 16
 	pos := 0

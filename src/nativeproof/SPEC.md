@@ -99,8 +99,9 @@ of that user's registered accounts from the active snapshot.
 
 The service records revoked-user tombstones that prevent keygen and rejoin.
 With `LKTRS_STATE_PATH`, quota policies, tombstones and consumed envelope
-digests are saved by atomic replacement with file and directory sync. Setup,
-private keys, counters and account records remain in memory. This optional
+digests are saved by atomic replacement with file and directory sync. Setup
+can be saved and loaded separately as described below. User private keys,
+counters and account records remain in memory. This optional
 ledger does not provide wallet recovery or authenticated enrollment.
 
 Library `Verifier.Verify` is stateless. Service `verify` additionally rejects
@@ -119,3 +120,84 @@ Historical verification requires the historical ring snapshot. Verification
 against the current snapshot rejects exited/revoked membership. Durable wallet
 counter storage, authenticated registration and an external cryptographic audit
 remain outside this research implementation's evidence.
+
+## Correspondence to the paper
+
+The correspondence below uses the author's supplied LaTeX manuscript for the
+linked paper (source SHA-256:
+`defe83ef19166bab03f735e425acd062aaae64e6551be079741ad7fef2a18c64`).
+Section names identify the construction independently of local file line numbers.
+“Preserved” describes an algebraic or API relation; it does not transfer a theorem.
+
+| Paper location | Executable interpretation | Source and behavioral evidence |
+|---|---|---|
+| V-A, Public Parameters | **Instantiated differently:** BN254 pairing order `r` and secp256k1 order `ell`, rather than one order `p`. Nym exponents reduce canonical secp integers modulo `r`; inverse/trace arithmetic stays modulo `ell`. Fixed hash-to-curve bases replace unspecified random generators. | `profile.go`: `Setup`, `Bases`, `IssueBase`; `circuit.go`: `Define`; `TestHostSetupAndPublicPolynomial`, `TestConnectedCircuit` |
+| III-D, Accumulator; V-A, Dynamic Ring Control | **Changed:** public powers `[tau^i]G`, scalar member hash `a`, and `e(W,[a]H+HTau)=e(V,H)`. The manuscript's literal iterated `u^x` equation omits the trapdoor, and its account group element cannot itself be used as an exponent. Rings are owned snapshots, not updates trusted from an arbitrary signature. | `profile.go`: `Member`, `Accumulate`, `MembershipWitness`, `VerifyMembership`, `Snapshot`; setup/polynomial and snapshot tests |
+| V-A, Key Generation | **Preserved user/account ownership:** one secret `x` across accounts; `Ui=[d]u`, `Yi=[x]Ui`. `d` is a private circuit input and optional public registry metadata. The circuit binds these account points to the same hashed member used by q-SDH. | `NewAccount`, `KeyGen`, `NewRegistry`; `Circuit.Define`; `TestHostHashesAndCanonicalAccounts`, account/outsider mutations |
+| V-A, Signature: seeds and pseudonym | **Instantiated:** 32-byte secret and issue encodings, SHA-256 branches 0/1, explicit reductions and nonzero checks. Nym depends on user and issue, not account, ring or quota. | `Seeds`, `MakeStatement`; `TestIssueScopedCrossRingSemantics`, `TestConnectedCircuit` |
+| V-A, Signature: `S`, `T`, counter | **Preserved algebra:** `S=[1/(s+cnt+1)]ut`, `T=[x]u+[R/(t+cnt+1)]ut`, `0 <= cnt < k`. Honest `Signer` maintains one counter per user/issue; the service pins quota after the first successful sign. A proof establishes a counter's range, not that the signer has never reused it. | `Signer.Sign`, `Service.policy`, `Circuit.Define`; `TestTRelation`, counter mutations, `TestGroth16Connected` |
+| V-A, Signature and Verification: transcript/SPK | **Concrete replacement:** one Groth16 proof binds ownership, membership, seeds, nym, S/T, range and challenge. Domain-separated transcript includes ordered ring digest, message prehash, timestamp, issue and quota. The verifier reconstructs public inputs. This is not the cited abstract SPK's implementation or cost model. | `Challenge`, `Assignment`, `Verifier.Verify`; repaired-challenge/tag mutation and real Groth16 tests |
+| V-A, Link | **Preserved issue-scoped equality:** verify both signatures, then compare issue and nym. Different accounts/rings for the same user and issue remain linkable. | `Verifier.Link`; real-proof link test, cross-ring semantics test |
+| V-A, Public Tracing | **Clarified output:** equal S with different R yields `[x]u`; a consistent public registry resolves a user, not the selected account key `(Ui,Yi)`. Reusing a counter can expose the user before `k+1` signatures exist. Unequal S means this pair uses different counters; it is not a statement about the complete transaction history. | `Verifier.Trace`, `Registry.Resolve`; duplicate-counter real proofs, early-reuse algebra test |
+| V-A/V-B, revocation and transactions | **Application boundary:** remove all registered accounts of a revoked user from the current ring. Old proofs may still verify against historical snapshots. Tombstones and the optional envelope ledger do not implement a blockchain, retroactive global invalidity or durable signer recovery. | `Registry.RevokeUser`, `Service`; real-proof current-ring rejection; snapshot/ledger tests |
+
+### Security statements and outstanding proof obligations
+
+| Paper property | What this implementation establishes or leaves open |
+|---|---|
+| Correctness | Host, connected-circuit and real-proof tests cover honest acceptance, field binding, Link and user-level tracing. This is finite behavioral evidence. |
+| Anonymity (Theorem 1) | The manuscript's anonymity definition allows identified signing queries under `L' != L`. If they share an issue, the ring-independent nym permits equality matching against the challenge. The profile explicitly permits that linkage; it does **not** claim anonymity under that game. Even a suitably restricted game requires analysis of the two orders, hash reductions and public registration metadata. |
+| Exculpability (Theorem 2) | Needs a knowledge-soundness reduction for this exact membership/ownership/trace composition, with user-level attribution and a trusted registration model. Rejecting forged fixtures is not such a reduction. |
+| k-traceability (Theorem 3) | For a fixed user/issue, k allowed counters imply a reused serial among more than k distinct uses. Extraction additionally requires compatible valid proofs and different R. Equal R/T is classified as replay; timestamps are not assumed unique. A full reduction must account for nym collisions, replay equivalence, hash assumptions and adversarial registration. |
+| Linkability (Theorem 4) | Equality of the issue-scoped nym is implemented and tested. A universal security claim needs sound binding to the same user and analysis of the chosen nym/seed construction. |
+| Unforgeability (Theorem 5) | The manuscript invokes an implication from traceability and exculpability. Applying it to this profile requires matching those definitions and proving the preceding obligations for the actual q-SDH/Groth16/two-order construction. |
+
+In particular, the q-SDH setup assumption, Groth16 knowledge soundness and zero
+knowledge, SHA-256/hash-to-curve assumptions and trusted enrollment are distinct
+from the serialization and execution checks. The published performance figures
+are not reproduced by this backend. Keeping the nym issue-scoped is intentional;
+including a ring digest would change linking and cross-ring quota/trace semantics.
+
+## Portable setup
+
+`setup.go` implements `lktrs/setup/v1`. `manifest.json` is UTF-8 JSON with an
+explicit profile, setup kind (`local-single-party`), curves, decimal scalar
+orders, pinned gnark/gnark-crypto versions, circuit SHA-256 and dimensions,
+q-SDH capacity, and SHA-256/byte count for `parameters.bin`, `pk.bin`, `vk.bin`.
+It contains no arbitrary file paths. The trusted identity is SHA-256 of the
+**exact manifest bytes**, supplied separately by the caller. Unknown/duplicate
+JSON fields, incompatible versions, altered files and circuit/layout mismatches
+are rejected. This is an integrity/provisioning contract, not a setup proof.
+
+`parameters.bin` is `LKTRSP01 || powerCount32 || G32 || H64 || HTau64 || powers`;
+integers are big-endian and points use gnark-crypto's canonical compressed BN254
+format. `powerCount=capacity+1`, bounded at 65,537. Decoding checks exact length,
+canonical on-curve/subgroup points, generators and adjacent pairing relations.
+PK/VK use the pinned gnark compressed `WriteTo` format. The loader checks the
+PK FFT domain, point-vector bounds, wire/infinity counts and commitment layout
+against the locally compiled circuit before third-party allocation. It also
+checks PK/VK shared setup points. VK commitment metadata is matched to the
+circuit, including gnark's extra commitment wires. Bounds are 1 MiB for the
+manifest/VK, 1 GiB for PK, and the capacity-derived bound for parameters.
+
+The constraint system is recompiled locally, not deserialized from a bundle.
+Its serialized digest and full dimensions must match the manifest. An existing
+output directory is refused; bundle export writes/syncs a staging directory and
+publishes it by rename. Bundle directories are immutable application inputs;
+they must not be edited concurrently with loading. User secrets, wallet state,
+trapdoors and private witnesses are absent. Library state remains owned and
+independent of input files after load.
+
+Public export preserves the original manifest fingerprint while omitting PK.
+Public verification reads only that manifest, public parameters and VK plus an
+explicit expected context/message/signature. A context file is
+`lktrs/context/v1` JSON containing issue (32-byte lowercase hex), quota and an
+ordered list of accounts with U/Y coordinates (64-byte lowercase hex each).
+It omits user IDs, account exponents, selected member and all witness values.
+Account points, uniqueness, capacity and quota are revalidated on import.
+The context is limited to 16 MiB and must be independently trusted as the
+expected ring/policy; the signature does not choose its own verification ring.
+
+Artifact hashes and a successful proof from a loaded PK establish consistency
+for the checked execution. They do not prove that an adversarially generated
+PK/VK is an honest setup for this circuit, nor that setup secrets were erased.

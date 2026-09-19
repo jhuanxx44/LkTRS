@@ -182,5 +182,9 @@ if(LKTRS_NATIVE_PROOF)
         add_dependencies(native_backend_tests lktrs_native_backend)
         add_test(NAME native_groth16_end_to_end COMMAND native_backend_tests "${LKTRS_NATIVE_EXECUTABLE}")
         set_tests_properties(native_groth16_end_to_end PROPERTIES TIMEOUT 1200 LABELS "native;groth16;slow")
+        add_test(NAME native_setup_roundtrip COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_setup_roundtrip.py"
+            "${LKTRS_NATIVE_EXECUTABLE}")
+        set_tests_properties(native_setup_roundtrip PROPERTIES TIMEOUT 1800 LABELS "native;groth16;slow")
     endif()
 endif()

@@ -61,7 +61,8 @@ user tombstones and consumed verification-envelope digests (mode 0600). A
 successful `verify` consumes an envelope digest once, including in ephemeral
 mode; `link` and `trace` remain pairwise analysis operations and do not consume it. This state file does not
 persist private signer keys, Groth16 proving keys, q-SDH setup or active account
-records, so restarting still requires explicit re-enrollment and setup. It is a
+records, so restarting still requires re-enrollment and loading or generating
+setup. It is a
 local research ledger, not secure key custody or production
 authorization. Do not share a state file between running processes. Replay
 filtering compares envelope bytes, so independently randomized proofs are not
@@ -79,3 +80,64 @@ paper notation. Its separate orders, hash encoding and message prehash do not
 have a security reduction established by these tests. BN254 does not justify
 128/256-bit security claims. Trusted setup, registry authentication, durable
 counters and key custody need independent treatment before real use.
+
+## Save setup and reproduce in separate processes
+
+Run these commands from the repository root after building. Each command starts
+and exits a separate process; loading never regenerates setup. Outputs are local
+artifacts and must stay outside Git.
+
+```sh
+mkdir -p local
+./build/native/lktrs-native setup --capacity 4 --out local/repro/setup \
+  > local/setup-result.json
+PIN=$(python3 -c 'import json; print(json.load(open("local/setup-result.json"))["manifest_sha256"])')
+./build/native/lktrs-native export-public --setup local/repro/setup \
+  --manifest-sha256 "$PIN" --out local/repro/public
+./build/native/lktrs-native sample --setup local/repro/setup \
+  --manifest-sha256 "$PIN" --out local/repro/sample
+./build/native/lktrs-native verify --setup local/repro/public \
+  --manifest-sha256 "$PIN" --context local/repro/sample/context.json \
+  --message local/repro/sample/message.bin --signature local/repro/sample/signature.bin
+```
+
+Output directories must be new.
+The sample uses fresh research accounts and the full native proof circuit;
+only the public ring, message and signature are saved. The verifier consumes no
+PK, user scalar, witness, signer database or private account exponent. Its
+explicit `--context` is the expected ring/issue/quota, not a context learned
+from the candidate signature.
+
+A complete setup contains `parameters.bin`, `pk.bin`, `vk.bin`, `manifest.json`.
+The public export contains the same manifest, parameters and VK, without PK.
+The PK is large (hundreds of MB); loading and proving still require several GB
+of RAM. PK is public proof-generation material, not a user's signing secret.
+The JSON manifest records the profile, library versions, both scalar orders,
+compiled R1CS digest/layout, capacity, and each artifact's byte count/digest.
+No q-SDH trapdoor or Groth16 toxic waste is serialized. `--manifest-sha256`
+must come from a trusted setup distribution channel; computing a hash of an
+arbitrary downloaded manifest does not authenticate it or attest an MPC ceremony.
+
+To start the C++-compatible service with existing setup:
+
+```sh
+./build/native/lktrs-native --stdio --setup local/repro/setup --manifest-sha256 "$PIN"
+```
+
+`setup` requests then fail as already initialized. Wallet accounts/counters are
+still fresh: this is setup recovery, not wallet backup. Independent `verify`
+CLI calls are stateless; the stdio service's additional replay ledger semantics
+remain as documented above.
+
+The reusable Go entry points are `ExportSetup`, `LoadSetup`, `LoadPublicSetup`,
+`ExportPublicSetup`, `MarshalVerificationContext` and `UnmarshalVerificationContext`.
+The manifest and file formats are specified in [SPEC.md](SPEC.md#portable-setup).
+Run the complete setup/reload/tamper/stdio test with:
+
+```sh
+python3 tests/native_setup_roundtrip.py build/native/lktrs-native
+```
+
+It is also registered as the slow `native_setup_roundtrip` CTest. Reproduction
+means using the same persisted parameters and keys, not generating identical
+random setup or proof bytes on each run.

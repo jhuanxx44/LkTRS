@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/consensys/gnark/logger"
 	"io"
@@ -34,7 +35,7 @@ func applyResourceLimits() error {
 	return nil
 }
 
-func serve() error {
+func serve(setupDir, pinText string) error {
 	logger.Disable()
 	if err := applyResourceLimits(); err != nil {
 		return err
@@ -46,6 +47,18 @@ func serve() error {
 			return err
 		}
 		service = loaded
+	}
+	if setupDir != "" || pinText != "" {
+		if setupDir == "" || pinText == "" {
+			return errors.New("--setup and --manifest-sha256 must be supplied together")
+		}
+		pin, err := np.ParseDigest(pinText)
+		if err != nil {
+			return err
+		}
+		if err := service.LoadSetup(setupDir, pin); err != nil {
+			return err
+		}
 	}
 	for {
 		var size uint32
@@ -75,12 +88,24 @@ func serve() error {
 	}
 }
 func main() {
-	if len(os.Args) != 2 || os.Args[1] != "--stdio" {
-		fmt.Fprintln(os.Stderr, "usage: lktrs-native --stdio")
-		os.Exit(2)
+	logger.Disable()
+	var err error
+	if len(os.Args) > 1 && os.Args[1] == "--stdio" {
+		flags := flag.NewFlagSet("--stdio", flag.ContinueOnError)
+		setup := flags.String("setup", "", "saved setup directory")
+		pin := flags.String("manifest-sha256", "", "trusted setup manifest fingerprint")
+		err = flags.Parse(os.Args[2:])
+		if err == nil && flags.NArg() != 0 {
+			err = errors.New("unexpected stdio arguments")
+		}
+		if err == nil {
+			err = serve(*setup, *pin)
+		}
+	} else {
+		err = artifactCommand(os.Args[1:], os.Stdout, os.Stderr)
 	}
-	if e := serve(); e != nil {
-		fmt.Fprintln(os.Stderr, e)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

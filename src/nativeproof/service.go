@@ -568,3 +568,19 @@ func (s *Service) policy(issue [32]byte, k uint32, create bool) error {
 	// A successful sign commits the new policy; validation alone is read-only.
 	return nil
 }
+
+// LoadSetup initializes the service from already generated artifacts. It never
+// performs a new setup, and does not restore signing keys, accounts or counters.
+func (s *Service) LoadSetup(dir string, pin [32]byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.prover != nil {
+		return errors.New("setup already completed")
+	}
+	loaded, err := LoadSetup(dir, pin)
+	if err != nil {
+		return err
+	}
+	s.params, s.prover, s.verifier = loaded.Parameters, loaded.Prover, loaded.Verifier
+	return nil
+}

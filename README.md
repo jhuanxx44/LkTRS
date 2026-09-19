@@ -9,7 +9,8 @@ Companion research implementation for **[Linkable, k-Times Traceable, and Revoca
 - A connected Groth16 circuit using BN254 q-SDH membership, secp256k1 account/trace tags and SHA-256.
 - A Go proof backend with a C++17 API and bounded local process transport.
 
-See the [protocol specification](src/nativeproof/SPEC.md) and [backend API](src/nativeproof/README.md) for the exact equations and interfaces.
+See the [protocol specification and paper correspondence](src/nativeproof/SPEC.md) and [backend API](src/nativeproof/README.md) for exact equations and interfaces.
+Saved setup can be reloaded for proving and [independent public-only verification](src/nativeproof/README.md#save-setup-and-reproduce-in-separate-processes).
 
 ## Build and run
 

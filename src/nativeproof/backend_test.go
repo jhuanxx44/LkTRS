@@ -177,6 +177,33 @@ func TestGroth16Connected(t *testing.T) {
 	if independent.Verify(revokedCtx, []byte("counter two"), two) == nil {
 		t.Fatal("current-ring revocation policy not enforced")
 	}
+	// Same issue, different ring and a different account for the same user.
+	// This pair suffices for tracing without an input containing a global use count.
+	otherAccounts := []Account{accounts[1], accounts[2]}
+	otherCtx, err := NewVerificationContext(p, otherAccounts, st.Issue, st.K)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crossStatement, crossWitness, err := MakeStatement(p, otherAccounts, 1, w.X, accounts[2].D, st.Issue, sha256.Sum256([]byte("different ring")), 200, st.K, w.Counter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crossSigned, err := prover.Prove(p, crossStatement, crossWitness)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linked, err = independent.Link(ctx, []byte("message one"), signed, otherCtx, []byte("different ring"), crossSigned)
+	if err != nil || !linked {
+		t.Fatalf("cross-ring issue link: %v", err)
+	}
+	result, err = independent.Trace(ctx, []byte("message one"), signed, otherCtx, []byte("different ring"), crossSigned, registry)
+	if err != nil || result.Status != TraceTraced || result.UserID != "alice" || !result.Key.Equal(&want) {
+		t.Fatalf("cross-ring repeated counter: %+v %v", result, err)
+	}
+	if independent.Verify(ctx, []byte("different ring"), crossSigned) == nil {
+		t.Fatal("wrong expected ring accepted")
+	}
+	t.Log("real proofs: cross-ring issue link and early duplicate-counter user tracing PASS")
 	t.Log("real proofs: cross-account link, legal counters, duplicate-counter trace, replay, quota, user revocation and wire roundtrip PASS")
 
 }
