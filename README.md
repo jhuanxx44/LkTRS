@@ -11,6 +11,7 @@ Companion research implementation for **[Linkable, k-Times Traceable, and Revoca
 
 See the [protocol specification and paper correspondence](src/nativeproof/SPEC.md) and [backend API](src/nativeproof/README.md) for exact equations and interfaces.
 Saved setup can be reloaded for proving and [independent public-only verification](src/nativeproof/README.md#save-setup-and-reproduce-in-separate-processes).
+Optional [authenticated setup/registry verification and encrypted-wallet APIs](src/nativeproof/README.md#authenticated-provisioning-enrollment-and-a-local-encrypted-wallet) have an explicit [security and trust contract](src/nativeproof/SECURITY.md).
 
 ## Build and run
 
@@ -50,6 +51,6 @@ LKTRS_PROVE=1 go test -count=1 -timeout=20m -run '^TestGroth16Connected$' -v
 
 ## Scope
 
-This executable profile uses explicit parameter and encoding choices that differ from the paper; it does not reproduce the paper's security proof or performance results. Setup is local and single-party, signer keys and counters are in memory, and same-issue signatures are linkable across rings. The optional service ledger stores quota policies, revocation tombstones and consumed envelopes, not a recoverable wallet. It is intended for research, not production assets.
+This executable profile uses explicit parameter and encoding choices that differ from the paper; it does not reproduce the paper's security proof or performance results. The default setup is local and single-party, the demo signer keeps keys and counters in memory, and same-issue signatures are linkable across rings. The optional service ledger stores quota policies, revocation tombstones and consumed envelopes, not a recoverable wallet. It is intended for research, not production assets.
 
 `src/nativeproof/` is the connected implementation; `src/protocol/` provides the C++ interface and clear reference. The witness-exposing clear reference and isolated `src/legacy/` prototype are not anonymous signing backends.

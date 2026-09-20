@@ -186,5 +186,13 @@ if(LKTRS_NATIVE_PROOF)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/native_setup_roundtrip.py"
             "${LKTRS_NATIVE_EXECUTABLE}")
         set_tests_properties(native_setup_roundtrip PROPERTIES TIMEOUT 1800 LABELS "native;groth16;slow")
+        add_test(NAME native_authorized_wallet
+            COMMAND "${CMAKE_COMMAND}" -E env LKTRS_PROVE=1
+                "LKTRS_TEST_CLI=${LKTRS_NATIVE_EXECUTABLE}"
+                "${LKTRS_GO_EXECUTABLE}" test -count=1 -timeout=20m
+                -run "^TestGroth16AuthorizedWallet$" -v)
+        set_tests_properties(native_authorized_wallet PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/nativeproof"
+            TIMEOUT 1800 LABELS "native;groth16;slow")
     endif()
 endif()

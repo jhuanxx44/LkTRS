@@ -19,6 +19,9 @@ func artifactCommand(args []string, out, errOut io.Writer) error {
 		return errors.New("expected setup, export-public, sample, verify, or --stdio")
 	}
 	op := args[0]
+	if op == "verify-authorized" {
+		return authorizedVerifyCommand(args[1:], out, errOut)
+	}
 	fs := flag.NewFlagSet(op, flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	dir := fs.String("setup", "", "setup bundle directory")

@@ -21,3 +21,17 @@ func TestArtifactArgumentsFailClosed(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthorizedVerifyArguments(t *testing.T) {
+	for _, args := range [][]string{
+		{"verify-authorized"},
+		{"verify-authorized", "--context", "untrusted.json"},
+		{"verify-authorized", "--manifest-sha256", "00"},
+		{"verify-authorized", "--setup", "missing", "--policy", "missing", "--setup-approval", "missing", "--registry", "missing", "--message", "missing", "--signature", "missing"},
+	} {
+		var out, errOut bytes.Buffer
+		if e := artifactCommand(args, &out, &errOut); e == nil || out.Len() != 0 {
+			t.Fatal("unauthorized verification did not fail closed", args, e)
+		}
+	}
+}

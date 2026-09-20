@@ -141,3 +141,65 @@ python3 tests/native_setup_roundtrip.py build/native/lktrs-native
 It is also registered as the slow `native_setup_roundtrip` CTest. Reproduction
 means using the same persisted parameters and keys, not generating identical
 random setup or proof bytes on each run.
+
+## Authenticated provisioning, enrollment and a local encrypted wallet
+
+The [security model](SECURITY.md) separates conditional reductions, the known
+anonymity counterexample, and trust/custody assumptions. These optional APIs do
+not change the circuit or turn the stdio demo into an authenticated service.
+
+* `SignSetupApproval` / `LoadAuthorizedVerifier`: an independently trusted
+  Ed25519 authority endorses the exact manifest, namespace and validity window.
+* `CreateEnrollment` / `VerifyEnrollment`: Schnorr possession proof bound to
+  the authority, setup, user/account labels and an authority-issued challenge.
+  The authority must authenticate the person and consume challenges externally.
+* `SignRegistryAuthorization`: signed ordered active registry, issue, quota,
+  epoch and expiry, with consistency and possession checks. `AuthorizedVerifier`
+  verifies signatures and traces within this authenticated snapshot.
+* `CreateSignerVault` / `OpenSignerVault`: XChaCha20-Poly1305 local wallet with an
+  externally supplied random 32-byte wrapping key. `SignerVault.Sign` reserves
+  and syncs a counter before proving, including across cooperative local
+  processes. Failed proofs burn slots. File rollback and HSM custody remain
+  external concerns; do not use the demo service to host this wallet remotely.
+* `ContributeQSDH` / `FinalizeQSDHCeremony`: bounded verification of a q-SDH
+  Phase1 contribution chain and reproducible beacon finalization. This does
+  not complete Groth16 Phase1/Phase2 or an independently operated ceremony.
+  Receipts alone are insufficient to reverify a chain. See the full-transcript
+  assumption and ceremony acceptance conditions in `SECURITY.md`.
+
+The independent verifier command takes a **trusted local policy** (not one
+received with the candidate signature):
+
+```sh
+./build/native/lktrs-native verify-authorized \
+  --setup local/public-setup --policy local/trusted-policy.json \
+  --setup-approval local/setup-approval.json --registry local/active-registry.json \
+  --message local/message.bin --signature local/signature.bin
+```
+
+The policy schema is `TrustPolicy` in `trust.go`; it pins namespace, exact
+manifest SHA-256, canonical base64 Ed25519 authority keys, exact registry epoch,
+32-byte lowercase-hex issue and quota. The approval and registry documents are
+created by the corresponding Go signing APIs using `crypto.Signer` (which can
+be supplied by an external key service). The command checks its system clock;
+it has no caller-controlled time override, self-selected authority, plain-ring
+fallback, or automatic acceptance of newer/older epochs. An operator must
+secure and update the policy itself. Signed records do not prove civil identity.
+
+Run a full local rehearsal, including actual proofs, wallet restart,
+authorized user tracing and independent CLI verification:
+
+```sh
+# From the repository root; the output is ignored process material.
+go -C src/nativeproof build -o "$PWD/local/lktrs-native-trust" ./cmd/lktrs-native
+cd src/nativeproof
+LKTRS_PROVE=1 LKTRS_TEST_CLI="$PWD/../../local/lktrs-native-trust" \
+  go test -count=1 -timeout=20m -run '^TestGroth16AuthorizedWallet$' -v
+```
+
+Optionally set `LKTRS_TEST_SETUP` to the absolute path of a **locally generated
+test setup** to reuse its keys. The test derives a pin from that test fixture;
+this is not an authentication procedure for downloaded artifacts. It creates
+local test authority keys and is not an enrollment or MPC deployment. Fast
+`go test ./...` runs malformed-input and trust-boundary tests, but skips this
+real-proof rehearsal unless `LKTRS_PROVE=1`.

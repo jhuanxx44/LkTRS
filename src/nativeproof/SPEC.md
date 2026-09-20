@@ -6,6 +6,10 @@ BN254 pairings, secp256k1 as the standalone group, SHA-256 and Groth16. It does
 not inherit the paper's security proof or cost claims. C++ owns a framed local
 process interface; Go/gnark supplies the native arithmetic and proof backend.
 
+The [security model and trust contract](SECURITY.md) gives explicit algebraic
+reductions, the anonymity counterexample, remaining assumptions, authenticated
+provisioning, the q-SDH ceremony adapter and encrypted-wallet boundaries.
+
 ## Parameters and deliberate differences
 
 - Pairing groups: BN254 G1/G2. Accumulator and witness are **both in G1**;
@@ -117,9 +121,12 @@ of proof randomness. Equal S with different R recovers
 `Yi=[d]([x]u)`. This does not extract the secret x or identify which account signed.
 
 Historical verification requires the historical ring snapshot. Verification
-against the current snapshot rejects exited/revoked membership. Durable wallet
-counter storage, authenticated registration and an external cryptographic audit
-remain outside this research implementation's evidence.
+against the current snapshot rejects exited/revoked membership. The optional
+`SignerVault` reserves durable counters before proving;
+`AuthorizedVerifier` accepts authority-signed setup/registry provisioning. Neither
+is enabled by the local demo service. Identity verification, rollback-resistant
+key custody and an external cryptographic audit remain outside the evidence.
+See [SECURITY.md](SECURITY.md) for the exact boundaries.
 
 ## Correspondence to the paper
 
