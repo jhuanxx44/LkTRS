@@ -15,6 +15,19 @@ Optional [authenticated setup/registry verification and encrypted-wallet APIs](s
 
 ## Build and run
 
+For an interactive application scenario, run the **[sensor cooperative demo](src/nativeproof/cmd/lktrs-demo/README.md)**:
+
+```sh
+bash scripts/run-demo.sh
+```
+
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787) to exercise shared device quotas, real proofs,
+linking, malicious counter-reuse tracing, revocation and independent public
+verification. Readings and identities are simulated; cryptographic results are
+computed live. This Go-only demo path needs no PBC/CMake or frontend build.
+First setup takes several minutes and several GB of RAM; generated artifacts
+remain under `local/`.
+
 Requires Go 1.25.7+, CMake 3.18+, a C++17 compiler, Python 3.8+, PBC, GMP and libsodium.
 
 **macOS**
@@ -51,6 +64,6 @@ LKTRS_PROVE=1 go test -count=1 -timeout=20m -run '^TestGroth16Connected$' -v
 
 ## Scope
 
-This executable profile uses explicit parameter and encoding choices that differ from the paper; it does not reproduce the paper's security proof or performance results. The default setup is local and single-party, the demo signer keeps keys and counters in memory, and same-issue signatures are linkable across rings. The optional service ledger stores quota policies, revocation tombstones and consumed envelopes, not a recoverable wallet. It is intended for research, not production assets.
+This executable profile uses explicit parameter and encoding choices that differ from the paper; it does not reproduce the paper's security proof or performance results. The default setup is local and single-party, the stdio service signer keeps keys and counters in memory, and same-issue signatures are linkable across rings. The sensor cooperative demo uses encrypted persistent wallet counters, with wrapping keys held only in process memory; restarting it creates a fresh participant session. The optional stdio service ledger stores quota policies, revocation tombstones and consumed envelopes, not a recoverable wallet. It is intended for research, not production assets.
 
 `src/nativeproof/` is the connected implementation; `src/protocol/` provides the C++ interface and clear reference. The witness-exposing clear reference and isolated `src/legacy/` prototype are not anonymous signing backends.

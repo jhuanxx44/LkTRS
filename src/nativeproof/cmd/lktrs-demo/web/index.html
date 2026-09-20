@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>小流域协作站 · Lk-TRS Demo</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#controls">跳到演示操作</a>
+<header class="masthead">
+  <a href="/" class="brand" aria-label="小流域协作站首页"><span class="brand-mark" aria-hidden="true">≈</span><span>小流域协作站<small>WATERSHED COOPERATIVE</small></span></a>
+  <div class="edition"><span class="live-dot"></span> 本地研究演示 <span class="edition-rule"></span> Lk-TRS / 01</div>
+</header>
+<main>
+  <section class="intro">
+    <div><p class="eyebrow">传感器数据协作 / 可关联 · 限额 · 可追责</p><h1>共享数据，<br class="mobile-break">也共享责任。</h1><p class="lede">三位参与者，四台设备。每人每期最多提交三份报告，<br class="desktop-break">一起观察正常协作与违规重用的区别。</p></div>
+    <div class="scope-note"><span class="scope-number">3</span><div>每人每期可用额度<small>跨设备共享 · 同一期可关联</small><small>读数为模拟数据 · 证明实时生成</small></div></div>
+  </section>
+
+  <section class="run-control" id="controls" aria-labelledby="stage-title">
+    <div class="stage-index" id="stage-index">01<span>/ 08</span></div>
+    <div class="stage-copy"><p class="eyebrow" id="stage-label">开始一次完整演示</p><h2 id="stage-title">建立协作组</h2><p id="stage-description">注册三位参与者、四台设备，签发成员快照。</p></div>
+    <div class="actions"><button class="primary" id="next" disabled>连接中…</button><button class="secondary" id="auto" disabled>连续运行全部步骤</button></div>
+    <div class="run-status" id="run-status" role="status" aria-live="polite">正在连接本地服务…</div>
+    <div class="progress-track" aria-hidden="true"><div id="progress"></div></div>
+  </section>
+  <p id="error" class="error" role="alert" hidden></p>
+  <div class="toolbar"><p id="session-label">尚未建立本期协作组</p><div><button id="download" class="text-button" disabled>导出公开证据 ↓</button><button id="reset" class="text-button" disabled>重新开始</button></div></div>
+
+  <div class="workspace">
+    <aside class="members-panel" aria-labelledby="members-title">
+      <div class="section-heading"><h2 id="members-title">参与者与设备</h2><span id="member-count">—</span></div>
+      <p class="panel-caption">演示操作者视角 · 身份为预设标签</p>
+      <div class="person alice" id="alice">
+        <div class="person-header"><span class="avatar">A</span><h3>Alice<small>两台设备，共享一份额度</small></h3><span class="member-status" id="alice-status">待注册</span></div>
+        <div class="device-list"><span>上游传感器<code>UPSTREAM</code></span><span>河口传感器<code>ESTUARY</code></span></div>
+        <div class="quota-heading"><span>本期已用额度</span><strong id="alice-count">0 / 3</strong></div>
+        <div class="quota" id="alice-slots" aria-label="Alice 已用 0 个额度"><span></span><span></span><span></span></div>
+        <p class="quota-note">换设备仍使用同一个钱包计数。</p>
+      </div>
+      <div class="person"><div class="person-header"><span class="avatar neutral">B</span><h3>Bob<small>支流传感器</small></h3><span class="member-status" id="bob-status">待注册</span></div><div class="small-quota"><span>本期已用额度</span><strong id="bob-count">0 / 3</strong></div></div>
+      <div class="person"><div class="person-header"><span class="avatar neutral">C</span><h3>Carol<small>水库传感器</small></h3><span class="member-status" id="carol-status">待注册</span></div><p class="quota-note">保持在协作组内，本次不提交报告。</p></div>
+      <div class="context-note"><span class="eyebrow">本期成员集合</span><strong id="epoch">尚未初始化</strong><p>撤销时更新成员版本。历史签名和当前准入分别检查。</p></div>
+    </aside>
+
+    <section class="reports-panel" aria-labelledby="reports-title">
+      <div class="section-heading"><h2 id="reports-title">公开报告流</h2><span id="report-count">0 份</span></div>
+      <p class="panel-caption">公开消息与签名 · 不直接列出签名账号</p>
+      <div id="reports" class="reports"><div class="empty"><div class="empty-waves" aria-hidden="true">≈</div><h3>第一份报告，从这里开始</h3><p>建立协作组后，提交一份报告。<br>这里会显示真实验签结果和本期化名。</p></div></div>
+      <div class="report-key"><span class="key-sample"></span> 相同化名表示本期可关联 <span class="key-explain">选择报告查看公开字段</span></div>
+    </section>
+
+    <aside class="evidence-panel" aria-labelledby="evidence-title">
+      <div class="section-heading"><h2 id="evidence-title">验证记录</h2><span id="check-count">等待运行</span></div>
+      <p class="panel-caption">每条结果来自后端计算或拒绝检查</p>
+      <ol id="checks" class="checks"><li class="waiting-check">完成一个步骤后，验证结果会出现在这里。</li></ol>
+    </aside>
+  </div>
+
+  <section class="inspector" aria-labelledby="inspector-title">
+    <div class="inspector-heading"><div><p class="eyebrow">公开材料检查器</p><h2 id="inspector-title">选择一份报告</h2></div><span id="inspector-status"></span></div>
+    <p id="inspector-empty">报告生成后，可检查消息、化名、序列标记与真实耗时。</p>
+    <div id="inspector-content" hidden>
+      <dl class="measurements"><div><dt>证明生成</dt><dd id="prove-time"></dd></div><div><dt>授权验签</dt><dd id="verify-time"></dd></div><div><dt>完整签名信封</dt><dd id="proof-size"></dd></div><div><dt>成员版本</dt><dd id="report-epoch"></dd></div></dl>
+      <div class="inspector-fields"><div><h3>模拟传感器消息</h3><pre id="message"></pre></div><div class="fingerprints"><h3>本期化名 nym</h3><code id="nym"></code><h3>序列标记 S</h3><code id="serial"></code></div></div>
+    </div>
+  </section>
+
+  <details class="boundaries"><summary>这次演示能说明什么？</summary><div class="boundary-grid"><div><h3>真实运行的部分</h3><p>Groth16 证明、授权验签、同一期关联、持久钱包计数、重复计数追责、成员撤销，以及独立进程验签。耗时为本机实测，包含对应 API 的开销。</p></div><div><h3>如何理解追责</h3><p>重复计数槽且挑战不同才触发本演示的追责；不必等到第四次。证明有效不代表业务可接收。追责解析到注册用户，不提取私钥，也不识别所用设备。</p></div><div><h3>明确的研究边界</h3><p>传感器读数和身份登记是模拟的；setup 为本地单方生成。同一期跨账号、跨环可关联，已有匿名性反例。此演示不构成完整安全证明或生产部署。所有角色由同一本地进程编排，独立验签另启进程。</p></div></div></details>
+  <footer><span>Lk-TRS · Research application</span><span>模拟观测 / 真实密码学执行 / 本地运行</span></footer>
+</main>
+</body>
+</html>

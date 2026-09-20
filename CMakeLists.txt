@@ -175,6 +175,16 @@ if(LKTRS_NATIVE_PROOF)
         DEPENDS ${LKTRS_GO_SOURCES} src/nativeproof/go.mod src/nativeproof/go.sum
         VERBATIM)
     add_custom_target(lktrs_native_backend ALL DEPENDS "${LKTRS_NATIVE_EXECUTABLE}")
+    file(GLOB LKTRS_DEMO_ASSETS CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/nativeproof/cmd/lktrs-demo/web/*"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/nativeproof/cmd/lktrs-demo/verify_export.py")
+    set(LKTRS_DEMO_EXECUTABLE "${CMAKE_CURRENT_BINARY_DIR}/lktrs-demo")
+    add_custom_command(OUTPUT "${LKTRS_DEMO_EXECUTABLE}"
+        COMMAND "${LKTRS_GO_EXECUTABLE}" build -mod=readonly -o "${LKTRS_DEMO_EXECUTABLE}" ./cmd/lktrs-demo
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/nativeproof"
+        DEPENDS ${LKTRS_GO_SOURCES} ${LKTRS_DEMO_ASSETS} src/nativeproof/go.mod src/nativeproof/go.sum
+        VERBATIM)
+    add_custom_target(lktrs_demo ALL DEPENDS "${LKTRS_DEMO_EXECUTABLE}")
     if(BUILD_TESTING)
         add_executable(native_backend_tests tests/native_backend_tests.cpp)
         target_link_libraries(native_backend_tests PRIVATE LkTRS::crypto)
@@ -194,5 +204,13 @@ if(LKTRS_NATIVE_PROOF)
         set_tests_properties(native_authorized_wallet PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/nativeproof"
             TIMEOUT 1800 LABELS "native;groth16;slow")
+        add_test(NAME native_application_demo
+            COMMAND "${CMAKE_COMMAND}" -E env LKTRS_PROVE=1
+                "LKTRS_DEMO_CLI=${LKTRS_NATIVE_EXECUTABLE}"
+                "${LKTRS_GO_EXECUTABLE}" test -count=1 -timeout=30m
+                -run "^TestDemoRealProofWorkflow$" -v ./cmd/lktrs-demo)
+        set_tests_properties(native_application_demo PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/nativeproof"
+            TIMEOUT 1800 LABELS "native;groth16;slow;demo")
     endif()
 endif()

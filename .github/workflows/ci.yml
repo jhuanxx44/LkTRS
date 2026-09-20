@@ -84,6 +84,13 @@ jobs:
           go vet ./...
       - name: Fast native CTest
         run: ctest --test-dir build/native --output-on-failure -LE slow
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Demo client and export regressions
+        run: |
+          node --test tests/demo_ui.test.cjs
+          python3 tests/demo_export_test.py
       # The real Groth16 setup/prove path is intentionally opt-in because it
       # takes several minutes and consumes substantial CI resources. A manual
       # dispatch must still exercise the connected C++/Go lifecycle rather than
